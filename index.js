@@ -43,7 +43,8 @@ io.on('connection', (socket) => {
     if (count >= 2) {
       count = 0
       if (users[0]) {
-        users[0].socket.emit('finish', users[1].gesture)
+        const gest = users[1] ? users[1].gesture : 'scissors'
+        users[0].socket.emit('finish', gest)
       }
       if (users[1]) {
         users[1].socket.emit('finish', users[0].gesture)
