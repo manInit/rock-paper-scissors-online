@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors')
 const app = express();
 const https = require('https');
+// const http = require('http');
 const fs = require('fs');
 
 const options = {
@@ -24,7 +25,11 @@ app.get('/', (req, res) => {
 });
 
 io.on('connection', (socket) => {
-  if (users.length >= 2) return;
+  for (let user of users) {
+    user.socket.emit('user-connect', socket.id)
+  }
+  socket.emit('init', users.map(u => u.id));
+
   users.push({
     id: socket.id,
     socket,
@@ -33,21 +38,35 @@ io.on('connection', (socket) => {
 
   console.log('a user connected');
   socket.on('disconnect', () => {
-    users = users.filter(({id}) => id !== socket.id)
+    if (users.length === 0) {
+      count = 0;
+      return;
+    }
+    users = users.filter(({id, gesture}) => {
+      if (gesture && id === socket.id) {
+        count--;
+        if (count < 0) count = 0;
+      }
+      return id !== socket.id
+    })
+    for (let user of users) {
+      user.socket.emit('user-disconnect', socket.id)
+    }
   });
 
   socket.on("play", async (gesture) => {
     count++
-    users.find(({id}) => id === socket.id).gesture = gesture
+    const userFinded = users.find(({id}) => id === socket.id)
+    if (userFinded) {
+      userFinded.gesture = gesture
+    }
 
-    if (count >= 2) {
+    if (count >= users.length) {
       count = 0
-      if (users[0]) {
-        const gest = users[1] ? users[1].gesture : 'scissors'
-        users[0].socket.emit('finish', gest)
-      }
-      if (users[1]) {
-        users[1].socket.emit('finish', users[0].gesture)
+      for (const user of users) {
+        user.socket.emit('finish', [
+          ...users.map(({id, gesture}) => [id, gesture])
+        ])
       }
       return 
     }
