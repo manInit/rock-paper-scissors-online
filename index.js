@@ -1,16 +1,16 @@
 const express = require('express');
 const cors = require('cors')
 const app = express();
-const https = require('https');
-// const http = require('http');
+// const https = require('https');
+const http = require('http');
 const fs = require('fs');
 
-const options = {
-  key: fs.readFileSync('../conf/key.pem'),
-  cert: fs.readFileSync('../conf/cert.pem')
-};
+// const options = {
+//   key: fs.readFileSync('../conf/key.pem'),
+//   cert: fs.readFileSync('../conf/cert.pem')
+// };
 
-const server = https.createServer(options, app);
+const server = http.createServer(app);
 const { Server } = require("socket.io");
 const io = new Server(server);
 
@@ -25,6 +25,11 @@ app.get('/', (req, res) => {
 });
 
 io.on('connection', (socket) => {
+  if (users.every(user => user.ready) && users.length > 1) {
+    console.log('disconnect')
+    socket.disconnect();
+    return;
+  }
   for (let user of users) {
     user.socket.emit('user-connect', socket.id)
   }
@@ -34,9 +39,9 @@ io.on('connection', (socket) => {
     id: socket.id,
     socket,
     gesture: "",
+    ready: false
   });
 
-  console.log('a user connected');
   socket.on('disconnect', () => {
     if (users.length === 0) {
       count = 0;
@@ -54,6 +59,14 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('gameOver', async () => {
+    socket.disconnect();
+  })
+
+  socket.on('ready', async () => {
+    users.find(user => user.id === socket.id).ready = true
+  })
+
   socket.on("play", async (gesture) => {
     count++
     const userFinded = users.find(({id}) => id === socket.id)
@@ -67,6 +80,7 @@ io.on('connection', (socket) => {
         user.socket.emit('finish', [
           ...users.map(({id, gesture}) => [id, gesture])
         ])
+        users.forEach(user => user.ready = false)
       }
       return 
     }
